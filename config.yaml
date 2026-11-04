@@ -1,0 +1,52 @@
+# Configuración del resumen y preprocesamiento (Cap. 4).
+# Los valores en null son OBLIGATORIOS: calíbrelos con --debug-samples.
+# Las rutas relativas se resuelven respecto a la carpeta de este archivo.
+
+fps: 25                         # tasa de decodificación (línea de tiempo de todos los índices)
+
+filter:                         # Paso 2 (intensidades 0–255 sobre el gris de análisis)
+  luma_threshold: 16            # θ_L: luminancia media mínima (cuadro negro)          [provisional]
+  std_threshold: 5              # θ_σ: desviación estándar mínima (cuadro uniforme)    [provisional]
+  static_threshold: 0.5         # θ_E: diferencia media entre cuadros (pantalla fija)  [provisional]
+  static_min_frames: 25         # duración mínima de pantalla fija (1 s)
+
+transnet:                       # Paso 3
+  repo_dir: ../TransNetV2       # repo clonado de TransNet V2 (dependencia)
+  weights: ../weights/TransNetV2/transnetv2-pytorch-weights.pth
+  threshold: 0.5                # transición si p > 0.5
+  batch_size: 64                # ventanas de 100 cuadros por lote en la GPU
+  timeout: 3600                 # segundos de espera de un trabajador al servidor GPU
+
+summary:                        # Pasos 3–5 (todas las candidatas conservadas son miniclips)
+  frames_per_clip: 32           # T
+  stride: 2                     # r  (L = T·r = 64, 2,56 s; igual que el preentrenamiento 32×2 de Swin)
+  phash_step: 25                # 1 cuadro por segundo dentro de la ventana
+  hamming_threshold: 25         # θ_H: único filtro de cantidad de miniclips  [provisional, recalibrar con r=2]
+  short_shot_windows: true      # true: cada toma de T a L−1 cuadros (1,28–2,5 s) aporta 1 candidata con r = 1
+
+output:                         # Paso 6
+  size: 224
+  resize_mode: stretch          # stretch | short_side_crop
+  sws_flags: bilinear+accurate_rnd+full_chroma_int
+  mean: [0.485, 0.456, 0.406]   # ImageNet (confirmar con el checkpoint de Video Swin)
+  std: [0.229, 0.224, 0.225]
+  crf: 18                       # calidad H.264 (yuv420p) de cada miniclip .mp4; 18 ≈ visualmente sin pérdida
+  preset: veryfast              # x264: más lento = más pequeño (veryfast: codifica varias veces más rápido que medium)
+
+analysis:                       # Pasada de análisis a baja resolución
+  gray_width: 64
+  gray_height: 36
+  gray_sws_flags: area
+  transnet_sws_flags: bicubic   # 48×27 con el escalador por defecto de ffmpeg (como el código oficial)
+  alignment_tolerance: 20.0     # aviso si la extracción no coincide con el análisis
+
+ffmpeg:
+  ffmpeg: ffmpeg
+  ffprobe: ffprobe
+  threads: 0                    # 0 = núcleos / trabajadores
+  extensions: [.mp4, .avi, .flv, .mkv, .mov, .wmv, .webm, .mpg, .mpeg, .m4v, .3gp, .ts, .vob, .ogv]
+
+debug:                          # --debug-samples / --debug-ids
+  playback_fps: null            # null = fps / r (12,5 fps con r=2: duración real de la ventana)
+  codec: libx264
+  crf: 18
